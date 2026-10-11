@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagonal Gap Closer</title>
+<style>
+  :root{
+    --bg:#14161a; --panel:#1c1f26; --panel2:#23272f; --line:#2e333d;
+    --text:#e6e8ec; --dim:#9aa2b1; --accent:#4c8dff; --accent-d:#3a76e0;
+    --mark:#ff2d55;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  header{
+    display:flex; align-items:center; gap:14px; padding:11px 18px;
+    border-bottom:1px solid var(--line); background:var(--panel);
+  }
+  header h1{font-size:15px; margin:0; font-weight:600}
+  header .sub{color:var(--dim); font-size:12px}
+  header .spacer{flex:1}
+  .hint{color:var(--dim); font-size:12px}
+
+  .wrap{display:flex; height:calc(100% - 47px); min-height:560px}
+
+  /* stage */
+  .stage{
+    flex:1; min-width:0; display:flex; align-items:center; justify-content:center;
+    padding:18px; overflow:auto; background:
+      repeating-conic-gradient(#1a1d23 0% 25%, #21252c 0% 50%) 50% / 18px 18px;
+  }
+  #drop{
+    width:min(560px,92%); padding:44px 24px; text-align:center;
+    border:2px dashed #39404d; border-radius:14px; color:var(--dim);
+    background:var(--panel);
+  }
+  #drop.hot{border-color:var(--accent); background:#1b2536; color:var(--text)}
+  #drop b{display:block; color:var(--text); font-size:16px; margin-bottom:6px}
+  #drop button{margin-top:16px}
+  #viewWrap{display:none; text-align:center}
+  #cView{
+    display:block; image-rendering:pixelated; image-rendering:crisp-edges;
+    border:1px solid #39404d; background:#fff;
+    box-shadow:0 6px 28px rgba(0,0,0,.5);
+  }
+  #viewWrap .tag{margin-top:10px; color:var(--dim); font-size:12px}
+
+  /* side */
+  .side{
+    width:340px; flex:none; border-left:1px solid var(--line); background:var(--panel);
+    overflow-y:auto; padding:14px 16px 24px;
+  }
+  .grp{margin-bottom:18px}
+  .grp > h2{
+    font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--dim); margin:0 0 9px; font-weight:600;
+  }
+  .row{display:flex; align-items:center; gap:8px; margin-bottom:8px}
+  .row label{flex:none; width:96px; color:var(--dim); font-size:12px}
+  .row .val{margin-left:auto; color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums}
+  select, input[type=number]{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:5px 7px; font-size:13px; width:100%;
+  }
+  select:focus{outline:none; border-color:var(--accent)}
+  input[type=range]{flex:1; min-width:0; accent-color:var(--accent)}
+  input[type=checkbox]{accent-color:var(--accent)}
+  .chk{display:flex; align-items:center; gap:6px; color:var(--dim); font-size:12px; cursor:pointer; margin-bottom:6px}
+
+  button{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:7px; padding:7px 12px; font-size:13px; cursor:pointer;
+  }
+  button:hover{border-color:#414855; background:#2a2f39}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600}
+  button.primary:hover{background:var(--accent-d); border-color:var(--accent-d)}
+  .btns{display:flex; gap:8px; flex-wrap:wrap}
+  .seg{display:flex; margin-bottom:8px}
+  .seg button{flex:1; border-radius:0}
+  .seg button:first-child{border-radius:7px 0 0 7px}
+  .seg button:last-child{border-radius:0 7px 7px 0}
+  .seg button + button{border-left:none}
+  .seg button.on{background:var(--accent); border-color:var(--accent); color:#fff}
+
+  .stats{
+    background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; font-size:12px; color:var(--dim); line-height:1.8;
+  }
+  .stats b{color:var(--text); font-variant-numeric:tabular-nums}
+  .stats .big{font-size:20px; color:var(--mark); font-weight:700}
+  .note{
+    background:#2a2018; border:1px solid #4a3620; color:#e8c9a0;
+    border-radius:8px; padding:9px 11px; font-size:12px; line-height:1.5;
+  }
+  .preview{
+    background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+    padding:8px; display:flex; align-items:center; justify-content:center;
+    min-height:110px; margin-bottom:10px;
+  }
+  .preview img{max-width:100%; max-height:150px; image-rendering:pixelated; display:block}
+  .download button{width:100%; padding:10px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Diagonal Gap Closer</h1>
+  <span class="sub">fills the diagonal-only gaps in thin pixel-art curves</span>
+  <span class="spacer"></span>
+  <span class="hint" id="fileInfo">No image loaded</span>
+</header>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <div id="drop">
+      <b>Drop a PNG here</b>
+      or paste from the clipboard (Ctrl+V)
+      <div><button class="primary" id="pickBtn">Choose image…</button></div>
+      <div class="hint" style="margin-top:14px">
+        Works on a copy of your line art. Nothing is uploaded — it all runs in this page.
+      </div>
+    </div>
+    <div id="viewWrap">
+      <canvas id="cView"></canvas>
+      <div class="tag" id="zoomTag"></div>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="grp">
+      <h2>Detection</h2>
+      <div class="row">
+        <label>Background</label>
+        <select id="bg">
+          <option value="auto">Auto-detect</option>
+          <option value="transparent">Transparent</option>
+          <option value="white">White</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>White cut-off</label>
+        <input type="range" id="thr" min="200" max="255" value="245">
+        <span class="val" id="thrVal">245</span>
+      </div>
+      <div class="hint" style="margin-top:-2px">
+        Pixels at or above this RGB value count as background when the background is white.
+      </div>
+    </div>
+
+    <div class="grp">
+      <h2>Strength</h2>
+      <div class="seg">
+        <button id="sCons" class="on">Conservative</button>
+        <button id="sAgg">Aggressive</button>
+      </div>
+      <div class="note" id="strengthNote"></div>
+    </div>
+
+    <div class="grp">
+      <h2>View</h2>
+      <div class="seg">
+        <button id="vRes" class="on">Result</button>
+        <button id="vOrg">Original</button>
+      </div>
+      <div class="row">
+        <label>Zoom</label>
+        <input type="range" id="zoom" min="1" max="24" value="8">
+        <span class="val" id="zoomVal">8×</span>
+      </div>
+      <div class="btns"><button id="fitBtn">Fit to window</button></div>
+      <label class="chk" style="margin-top:10px">
+        <input type="checkbox" id="hl" checked> Mark added pixels
+      </label>
+    </div>
+
+    <div class="grp">
+      <h2>Result</h2>
+      <div class="stats">
+        Added <span class="big" id="addCount">0</span> pixel(s)<br>
+        Image <b id="dimOut">–</b> · background <b id="bgOut">–</b>
+      </div>
+      <div class="preview" style="margin-top:10px"><img id="prevImg" alt="result preview"></div>
+      <div class="row">
+        <label>Save at</label>
+        <select id="scale">
+          <option value="1">1× (actual pixels)</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+          <option value="8">8×</option>
+        </select>
+      </div>
+      <div class="download"><button class="primary" id="dlBtn" disabled>Download PNG</button></div>
+      <div class="hint" style="margin-top:8px; text-align:center">
+        If nothing downloads, right-click the preview →
+        <span style="color:var(--text)">Save image as…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="file" accept="image/*" hidden>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* CORE-START */
+  // Faithful port of diagonal_gap_closer.py (Pillow version):
+  // find foreground pixels that touch only diagonally (both orthogonal bridge
+  // pixels empty) and add one bridge pixel to close the gap.
+  function closeDiagonalGaps(w, h, data, opts){
+    var thr = opts.whiteThreshold;
+    var aggressive = opts.strength === "aggressive";
+    var n = w * h, i, p;
+
+    // --- background mode ---
+    var bgMode = opts.bgMode;
+    if(bgMode === "auto"){
+      var semi = 0;
+      for(i = 0; i < n; i++){ if(data[i*4+3] < 255){ semi++; break; } }
+      bgMode = semi > 0 ? "transparent" : "white";
+    }
+
+    // --- foreground mask ---
+    var mask = new Uint8Array(n);
+    if(bgMode === "transparent"){
+      for(i = 0; i < n; i++) mask[i] = data[i*4+3] > 0 ? 1 : 0;
+    } else {
+      for(i = 0; i < n; i++){
+        p = i * 4;
+        var white = data[p] >= thr && data[p+1] >= thr && data[p+2] >= thr;
+        mask[i] = (data[p+3] !== 0 && !white) ? 1 : 0;
+      }
+    }
+
+    var out = new Uint8ClampedArray(data);
+    var added = new Uint8Array(n);
+    var count = 0;
+
+    function support(cx, cy){
+      var s = 0, ox, oy, xx, yy;
+      for(oy = -1; oy <= 1; oy++){
+        for(ox = -1; ox <= 1; ox++){
+          if(!ox && !oy) continue;
+          xx = cx + ox; yy = cy + oy;
+          if(xx >= 0 && xx < w && yy >= 0 && yy < h && mask[yy*w+xx]) s++;
+        }
+      }
+      return s;
+    }
+
+    var DX = [1, 1], DY = [1, -1];
+    var x, y, d, dx, dy, nx, ny, ax, ay, bx, by, sa, sb, cx, cy;
+
+    for(y = 0; y < h; y++){
+      for(x = 0; x < w; x++){
+        if(!mask[y*w+x]) continue;
+        for(d = 0; d < 2; d++){
+          dx = DX[d]; dy = DY[d];
+          nx = x + dx; ny = y + dy;
+          if(!(nx >= 0 && nx < w && ny >= 0 && ny < h && mask[ny*w+nx])) continue;
+
+          ax = x + dx; ay = y;              // bridge pixel A
+          bx = x;      by = y + dy;          // bridge pixel B
+          if(!(ax >= 0 && ax < w && ay >= 0 && ay < h &&
+               bx >= 0 && bx < w && by >= 0 && by < h)) continue;
+          if(mask[ay*w+ax] || mask[by*w+bx]) continue;   // already joined
+
+          sa = support(ax, ay); sb = support(bx, by);
+          if(sa === sb && !aggressive) continue;          // ambiguous: skip
+          if(sa >= sb){ cx = ax; cy = ay; } else { cx = bx; cy = by; }
+          if(!(aggressive || sa !== sb)) continue;
+
+          // most common foreground colour around the chosen pixel (first wins ties)
+          var bestIdx = -1, best = -1, counts = {}, key, c, ox2, oy2, xx2, yy2, pi;
+          for(oy2 = -1; oy2 <= 1; oy2++){
+            for(ox2 = -1; ox2 <= 1; ox2++){
+              xx2 = cx + ox2; yy2 = cy + oy2;
+              if(xx2 < 0 || xx2 >= w || yy2 < 0 || yy2 >= h) continue;
+              if(!mask[yy2*w+xx2]) continue;
+              pi = (yy2*w + xx2) * 4;
+              key = data[pi] + "," + data[pi+1] + "," + data[pi+2] + "," + data[pi+3];
+              c = (counts[key] || 0) + 1;
+              counts[key] = c;
+              if(c > bestIdx){ bestIdx = c; best = pi; }
+            }
+          }
+          if(best >= 0){
+            var oi = (cy*w + cx) * 4;
+            out[oi]   = data[best];
+            out[oi+1] = data[best+1];
+            out[oi+2] = data[best+2];
+            out[oi+3] = data[best+3];
+            if(!added[cy*w+cx]){ added[cy*w+cx] = 1; count++; }
+          }
+        }
+      }
+    }
+    return { out: out, added: added, count: count, bgMode: bgMode };
+  }
+  /* CORE-END */
+
+  var srcData = null, srcW = 0, srcH = 0;
+  var resData = null, resAdded = null, resCount = 0, resBg = "";
+  var cSrc = document.createElement("canvas"), gSrc = cSrc.getContext("2d", {willReadFrequently:true});
+  var cRes = document.createElement("canvas"), gRes = cRes.getContext("2d", {willReadFrequently:true});
+  var cView = $("cView"), gView = cView.getContext("2d");
+  var prevURL = null, lastBlob = null, baseName = "image";
+
+  /* ---------- load ---------- */
+  function loadFile(f){
+    if(!f || !/^image\//.test(f.type)) return;
+    var r = new FileReader();
+    r.onload = function(){
+      var im = new Image();
+      im.onload = function(){
+        baseName = (f.name || "image").replace(/\.[^.]+$/, "");
+        srcW = im.naturalWidth; srcH = im.naturalHeight;
+        cSrc.width = srcW; cSrc.height = srcH;
+        gSrc.clearRect(0,0,srcW,srcH);
+        gSrc.drawImage(im, 0, 0);
+        srcData = gSrc.getImageData(0, 0, srcW, srcH).data;
+
+        $("drop").style.display = "none";
+        $("viewWrap").style.display = "block";
+        $("fileInfo").textContent = f.name + "  ·  " + srcW + " × " + srcH;
+        fitZoom();
+        run();
+      };
+      im.src = r.result;
+    };
+    r.readAsDataURL(f);
+  }
+
+  $("pickBtn").onclick = function(){ $("file").click(); };
+  $("file").onchange = function(e){ if(e.target.files[0]) loadFile(e.target.files[0]); };
+  ["dragenter","dragover"].forEach(function(ev){
+    $("stage").addEventListener(ev, function(e){ e.preventDefault(); $("drop").classList.add("hot"); });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    $("stage").addEventListener(ev, function(e){ e.preventDefault(); $("drop").classList.remove("hot"); });
+  });
+  $("stage").addEventListener("drop", function(e){
+    var f = e.dataTransfer && e.dataTransfer.files[0];
+    if(f) loadFile(f);
+  });
+  window.addEventListener("paste", function(e){
+    var it = e.clipboardData && e.clipboardData.items;
+    if(!it) return;
+    for(var i=0;i<it.length;i++){
+      if(it[i].type.indexOf("image/") === 0){ loadFile(it[i].getAsFile()); break; }
+    }
+  });
+
+  /* ---------- process ---------- */
+  function run(){
+    if(!srcData) return;
+    var r = closeDiagonalGaps(srcW, srcH, srcData, {
+      bgMode: $("bg").value,
+      whiteThreshold: +$("thr").value,
+      strength: state.strength
+    });
+    resData = r.out; resAdded = r.added; resCount = r.count; resBg = r.bgMode;
+
+    cRes.width = srcW; cRes.height = srcH;
+    gRes.putImageData(new ImageData(new Uint8ClampedArray(r.out), srcW, srcH), 0, 0);
+
+    $("addCount").textContent = resCount;
+    $("dimOut").textContent = srcW + " × " + srcH;
+    $("bgOut").textContent = resBg;
+    draw(); exportBlob();
+  }
+
+  /* ---------- display ---------- */
+  function maxZoomForFit(){
+    var pad = 60;
+    var aw = $("stage").clientWidth - pad, ah = $("stage").clientHeight - pad;
+    var z = Math.min(aw/srcW, ah/srcH);
+    return Math.max(1, Math.min(24, Math.floor(z)));
+  }
+  function fitZoom(){ $("zoom").value = maxZoomForFit(); $("zoomVal").textContent = $("zoom").value + "×"; }
+
+  function draw(){
+    if(!resData) return;
+    var z = +$("zoom").value;
+    var showOrg = state.view === "original";
+    var src = showOrg ? cSrc : cRes;
+
+    cView.width = srcW * z; cView.height = srcH * z;
+    gView.imageSmoothingEnabled = false;
+    gView.clearRect(0,0,cView.width,cView.height);
+    gView.drawImage(src, 0, 0, srcW, srcH, 0, 0, cView.width, cView.height);
+
+    if(!showOrg && $("hl").checked && resCount){
+      gView.fillStyle = "rgba(255,45,85,0.85)";
+      for(var y=0;y<srcH;y++){
+        for(var x=0;x<srcW;x++){
+          if(resAdded[y*srcW+x]) gView.fillRect(x*z, y*z, z, z);
+        }
+      }
+    }
+    if(z >= 12){
+      gView.strokeStyle = "rgba(255,255,255,0.10)"; gView.lineWidth = 1;
+      gView.beginPath();
+      for(var gx=1; gx<srcW; gx++){ gView.moveTo(gx*z+0.5, 0); gView.lineTo(gx*z+0.5, cView.height); }
+      for(var gy=1; gy<srcH; gy++){ gView.moveTo(0, gy*z+0.5); gView.lineTo(cView.width, gy*z+0.5); }
+      gView.stroke();
+    }
+    $("zoomTag").textContent = srcW + " × " + srcH + " px  ·  " + z + "× zoom  ·  "
+      + (showOrg ? "original" : (resCount + " pixel(s) added"));
+  }
+
+  /* ---------- export ---------- */
+  function exportBlob(){
+    var s = +$("scale").value;
+    var c = document.createElement("canvas");
+    c.width = srcW * s; c.height = srcH * s;
+    var g = c.getContext("2d");
+    g.imageSmoothingEnabled = false;
+    g.drawImage(cRes, 0, 0, srcW, srcH, 0, 0, c.width, c.height);
+    c.toBlob(function(blob){
+      lastBlob = blob;
+      $("dlBtn").disabled = !blob;
+      if(prevURL){ URL.revokeObjectURL(prevURL); prevURL = null; }
+      if(blob){ prevURL = URL.createObjectURL(blob); $("prevImg").src = prevURL; }
+    }, "image/png");
+  }
+
+  /* ---------- controls ---------- */
+  var state = { strength:"conservative", view:"result" };
+
+  var NOTE = {
+    conservative: "Conservative skips a gap when both bridge pixels are equally supported. "
+      + "On plain diagonal lines that is almost always the case, so it often adds nothing.",
+    aggressive: "Aggressive also fills ambiguous gaps (ties), which is what actually closes a "
+      + "plain staircase or shallow curve. Use this for thin curves."
+  };
+  function setStrength(s){
+    state.strength = s;
+    $("sCons").classList.toggle("on", s === "conservative");
+    $("sAgg").classList.toggle("on", s === "aggressive");
+    $("strengthNote").textContent = NOTE[s];
+    run();
+  }
+  $("sCons").onclick = function(){ setStrength("conservative"); };
+  $("sAgg").onclick  = function(){ setStrength("aggressive"); };
+
+  $("vRes").onclick = function(){ state.view = "result";   $("vRes").classList.add("on"); $("vOrg").classList.remove("on"); draw(); };
+  $("vOrg").onclick = function(){ state.view = "original"; $("vOrg").classList.add("on"); $("vRes").classList.remove("on"); draw(); };
+
+  $("bg").onchange = run;
+  $("thr").addEventListener("input", function(){ $("thrVal").textContent = this.value; run(); });
+  $("zoom").addEventListener("input", function(){ $("zoomVal").textContent = this.value + "×"; draw(); });
+  $("fitBtn").onclick = function(){ fitZoom(); draw(); };
+  $("hl").onchange = draw;
+  $("scale").onchange = exportBlob;
+
+  $("dlBtn").onclick = function(){
+    if(!lastBlob) return;
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(lastBlob);
+    a.download = baseName + "-gaps-closed.png";
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  };
+
+  window.addEventListener("resize", function(){ if(srcData) draw(); });
+  setStrength("conservative");
+})();
+</script>
+</body>
+</html>
